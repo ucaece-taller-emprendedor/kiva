@@ -32,3 +32,15 @@ export function mensajeDeError(e: unknown): string {
   }
   return mapa[code] ?? 'Ocurrió un error inesperado. Probá de nuevo.'
 }
+
+/** Igual que validarFormulario pero para datos que ya están en el estado de React (formularios controlados). */
+export function validarDatos<T>(schema: ZodType<T>, crudo: unknown): { datos: T; errores?: undefined } | { datos?: undefined; errores: Errores } {
+  const r = schema.safeParse(crudo)
+  if (r.success) return { datos: r.data }
+  const errores: Errores = {}
+  for (const issue of r.error.issues) {
+    const campo = String(issue.path[0] ?? 'general')
+    errores[campo] ??= issue.message
+  }
+  return { errores }
+}

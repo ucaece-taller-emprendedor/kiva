@@ -1,7 +1,8 @@
 import { onSnapshot, type DocumentData, type Query } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 
-export type Con<T> = T & { id: string }
+/** Documento con su id y su ruta completa (útil en consultas entre colecciones). */
+export type Con<T> = T & { id: string; ruta: string }
 
 /**
  * Escucha una consulta de Firestore en tiempo real.
@@ -14,7 +15,7 @@ export function useColeccion<T = DocumentData>(consulta: Query | null): { datos:
     if (!consulta) return
     return onSnapshot(
       consulta,
-      snap => setEstado({ datos: snap.docs.map(d => ({ id: d.id, ...(d.data() as T) })), cargando: false, error: null }),
+      snap => setEstado({ datos: snap.docs.map(d => ({ id: d.id, ruta: d.ref.path, ...(d.data() as T) })), cargando: false, error: null }),
       e => setEstado({ datos: [], cargando: false, error: e.code === 'permission-denied' ? 'No tenés permiso para ver estos datos.' : 'No se pudieron cargar los datos.' }),
     )
   }, [consulta])
