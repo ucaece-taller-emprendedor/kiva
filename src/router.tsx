@@ -3,6 +3,7 @@ import { RequireAdmin, RequireAuth, RequireRole } from '@/auth/guards'
 import { AdminLayout, SitioLayout } from '@/components/layouts'
 import { NegocioLayout } from '@/components/layouts-negocio'
 import Administradores from '@/pages/admin/Administradores'
+import Estadisticas from '@/pages/admin/Estadisticas'
 import AdminLogin from '@/pages/admin/AdminLogin'
 import { AdminAlojamientos, AdminInicio, AdminUsuarios } from '@/pages/admin/AdminPaginas'
 import { AppInicio, CompletarPerfil, Ingresar, Registro, Suspendido } from '@/pages/app/Acceso'
@@ -52,7 +53,7 @@ export const router = createBrowserRouter([
     path: '/admin',
     element: (
       <RequireAdmin>
-        <AdminLayout navegacion={[{ to: '/admin', etiqueta: 'Consola', fin: true }, { to: '/admin/alojamientos', etiqueta: 'Alojamientos' }, { to: '/admin/usuarios', etiqueta: 'Usuarios' }, { to: '/admin/administradores', etiqueta: 'Administradores' }]} />
+        <AdminLayout navegacion={[{ to: '/admin', etiqueta: 'Consola', fin: true }, { to: '/admin/alojamientos', etiqueta: 'Alojamientos' }, { to: '/admin/usuarios', etiqueta: 'Usuarios' }, { to: '/admin/administradores', etiqueta: 'Administradores' }, { to: '/admin/estadisticas', etiqueta: 'Estadísticas' }]} />
       </RequireAdmin>
     ),
     children: [
@@ -60,6 +61,7 @@ export const router = createBrowserRouter([
       { path: 'alojamientos', element: <AdminAlojamientos /> },
       { path: 'usuarios', element: <AdminUsuarios /> },
       { path: 'administradores', element: <Administradores /> },
+      { path: 'estadisticas', element: <Estadisticas /> },
       { path: '*', element: <Navigate to="/admin" replace /> },
     ],
   },
