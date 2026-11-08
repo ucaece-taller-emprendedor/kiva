@@ -1,0 +1,191 @@
+rules_version = '2';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REGLAS DE SEGURIDAD DE KIVA — son la "validación del servidor" de esta app.
+// Todo lo que no está permitido acá, queda DENEGADO.
+// Roles: client (huésped) | business (dueño de un alojamiento, requiere aprobación) | admin (custom claim `admin: true`).
+//
+// Colecciones:
+//   users/{uid}                              perfil + rol + estado de aprobación
+//   alojamientos/{aid}                       un alojamiento por dueño (aid = uid del business)
+//   alojamientos/{aid}/unidades/{id}         cabañas / departamentos del alojamiento
+//   alojamientos/{aid}/reservas/{id}         reservas (PRIVADAS: solo el dueño y el huésped de esa reserva)
+//   alojamientos/{aid}/ocupacion/{unidad_fecha}  una noche ocupada de una unidad, sin datos personales.
+//                                            El id único impide, en el servidor, reservar dos veces la misma noche.
+//   alojamientos/{aid}/pagos/{id}            pagos SIMULADOS ("Registro de prueba"; no hay pasarela)
+// ─────────────────────────────────────────────────────────────────────────────
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+    function signedIn() { return request.auth != null; }
+    // El rol admin se da con un custom claim (scripts/admin-dar.ts). Un usuario no puede ponérselo.
+    function isAdmin() { return signedIn() && request.auth.token.admin == true; }
+    function isOwner(uid) { return signedIn() && request.auth.uid == uid; }
+    function userDoc(uid) { return get(/databases/$(database)/documents/users/$(uid)).data; }
+    function hasUserDoc(uid) { return exists(/databases/$(database)/documents/users/$(uid)); }
+    function isActive() { return signedIn() && hasUserDoc(request.auth.uid) && userDoc(request.auth.uid).status == 'activo'; }
+    function hasRole(role) { return isActive() && userDoc(request.auth.uid).role == role; }
+    // Dueño APROBADO de ese alojamiento (el id del alojamiento es el uid de su dueño).
+    function isBizOwner(aid) { return isOwner(aid) && hasRole('business'); }
+    function onlyKeys(keys) { return request.resource.data.keys().hasOnly(keys); }
+    function hasKeys(keys) { return request.resource.data.keys().hasAll(keys); }
+    function str(v, min, max) { return v is string && v.size() >= min && v.size() <= max; }
+    function entero(v, min, max) { return v is int && v >= min && v <= max; }
+    function isoDate(v) { return v is string && v.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'); }
+
+    // ── users/{uid} ────────────────────────────────────────────────────────
+    // Cada uno lee su perfil; el admin lee y gestiona todos.
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+
+      // Alta: solo el propio usuario, solo roles registrables, y el estado inicial queda
+      // fijado por el rol (client → activo; business → pendiente hasta que el admin apruebe).
+      // NUNCA se puede crear con role 'admin'.
+      allow create: if isOwner(uid)
+        && onlyKeys(['email', 'displayName', 'role', 'status', 'isDemo', 'createdAt'])
+        && hasKeys(['email', 'displayName', 'role', 'status', 'isDemo', 'createdAt'])
+        && str(request.resource.data.displayName, 2, 80)
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.isDemo == false
+        && request.resource.data.createdAt == request.time
+        && ((request.resource.data.role == 'client' && request.resource.data.status == 'activo')
+         || (request.resource.data.role == 'business' && request.resource.data.status == 'pendiente'));
+
+      // El dueño solo puede cambiar su nombre. role y status están vedados (no hay escalada).
+      allow update: if (isOwner(uid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName'])
+          && str(request.resource.data.displayName, 2, 80))
+        // El admin cambia tipo (nunca a 'admin') y estado.
+        || (isAdmin()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'status', 'displayName'])
+          && request.resource.data.role in ['client', 'business', 'admin']
+          && request.resource.data.status in ['activo', 'pendiente', 'suspendido']
+          && (request.resource.data.role != 'admin' || resource.data.role == 'admin'));
+
+      allow delete: if false;
+    }
+
+    // ── alojamientos/{aid} ─────────────────────────────────────────────────
+    // Lo ven los usuarios activos (el huésped elige dónde consultar), su dueño y el admin.
+    match /alojamientos/{aid} {
+      allow read: if isOwner(aid) || isAdmin() || isActive();
+
+      // Solo un business APROBADO crea SU alojamiento (id = su uid).
+      allow create: if isBizOwner(aid)
+        && onlyKeys(['nombre', 'whatsapp', 'email', 'isDemo', 'createdAt'])
+        && hasKeys(['nombre', 'whatsapp', 'email', 'isDemo', 'createdAt'])
+        && str(request.resource.data.nombre, 2, 80)
+        && str(request.resource.data.whatsapp, 0, 40)
+        && str(request.resource.data.email, 0, 120)
+        && request.resource.data.isDemo == false
+        && request.resource.data.createdAt == request.time;
+
+      allow update: if isBizOwner(aid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nombre', 'whatsapp', 'email'])
+        && str(request.resource.data.nombre, 2, 80)
+        && str(request.resource.data.whatsapp, 0, 40)
+        && str(request.resource.data.email, 0, 120);
+
+      allow delete: if isAdmin();
+
+      // ── Unidades ──────────────────────────────────────────────────────
+      function unidadValida(d) {
+        return str(d.nombre, 2, 60) && str(d.tipo, 0, 60) && entero(d.capacidad, 1, 50)
+          && d.comodidades is list && d.comodidades.size() <= 10;
+      }
+      match /unidades/{id} {
+        allow read: if isOwner(aid) || isAdmin() || isActive();
+        allow create: if isBizOwner(aid)
+          && onlyKeys(['nombre', 'tipo', 'capacidad', 'comodidades', 'isDemo', 'createdAt'])
+          && request.resource.data.isDemo == false
+          && request.resource.data.createdAt == request.time
+          && unidadValida(request.resource.data);
+        allow update: if isBizOwner(aid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nombre', 'tipo', 'capacidad', 'comodidades'])
+          && unidadValida(request.resource.data);
+        allow delete: if isBizOwner(aid);
+      }
+
+      // ── Reservas ──────────────────────────────────────────────────────
+      // estado: confirmada (la carga el dueño) | consulta (la pide un huésped) | rechazada
+      function reservaValida(d) {
+        return str(d.unitId, 1, 60) && str(d.unitName, 1, 60) && str(d.alojamientoNombre, 1, 80)
+          && str(d.guestName, 2, 80) && str(d.contact, 3, 120)
+          && isoDate(d.checkIn) && isoDate(d.checkOut) && d.checkOut > d.checkIn
+          && entero(d.total, 0, 1000000000) && entero(d.paid, 0, 1000000000) && d.paid <= d.total
+          && d.estado in ['confirmada', 'consulta', 'rechazada']
+          && exists(/databases/$(database)/documents/alojamientos/$(aid)/unidades/$(d.unitId));
+      }
+      match /reservas/{id} {
+        // El dueño ve todas las de su alojamiento; el huésped solo las suyas. El admin NO ve datos de huéspedes.
+        allow read: if isOwner(aid) || (signedIn() && resource.data.clientId == request.auth.uid);
+
+        allow create:
+          // El dueño carga una reserva confirmada (sin huésped vinculado).
+          if (isBizOwner(aid)
+            && onlyKeys(['unitId', 'unitName', 'alojamientoNombre', 'guestName', 'contact', 'checkIn', 'checkOut', 'total', 'paid', 'estado', 'clientId', 'isDemo', 'createdAt'])
+            && request.resource.data.clientId == null
+            && request.resource.data.estado == 'confirmada'
+            && request.resource.data.isDemo == false
+            && request.resource.data.createdAt == request.time
+            && reservaValida(request.resource.data))
+          // Un huésped activo envía una CONSULTA a su nombre: sin importes, sin cobro, sin bloquear fechas.
+          || (hasRole('client')
+            && onlyKeys(['unitId', 'unitName', 'alojamientoNombre', 'guestName', 'contact', 'checkIn', 'checkOut', 'total', 'paid', 'estado', 'clientId', 'isDemo', 'createdAt'])
+            && request.resource.data.clientId == request.auth.uid
+            && request.resource.data.guestName == userDoc(request.auth.uid).displayName
+            && request.resource.data.estado == 'consulta'
+            && request.resource.data.total == 0
+            && request.resource.data.paid == 0
+            && request.resource.data.isDemo == false
+            && request.resource.data.createdAt == request.time
+            && exists(/databases/$(database)/documents/alojamientos/$(aid))
+            && reservaValida(request.resource.data));
+
+        // Solo el dueño edita. clientId, createdAt e isDemo no se pueden tocar.
+        allow update: if isBizOwner(aid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['unitId', 'unitName', 'guestName', 'contact', 'checkIn', 'checkOut', 'total', 'paid', 'estado'])
+          && reservaValida(request.resource.data);
+
+        // El dueño borra; el huésped puede retirar su propia consulta mientras sea consulta.
+        allow delete: if isBizOwner(aid)
+          || (signedIn() && resource.data.clientId == request.auth.uid && resource.data.estado == 'consulta');
+      }
+
+      // ── Ocupación: una noche de una unidad (id = unidad_AAAA-MM-DD) ───────────
+      // Sin nombres ni importes: es lo que ve el huésped. Como el id es único y no se puede
+      // "actualizar", dos reservas no pueden tomar la misma noche de la misma unidad.
+      match /ocupacion/{id} {
+        allow read: if isOwner(aid) || isAdmin() || isActive();
+        allow create: if isBizOwner(aid)
+          && onlyKeys(['unitId', 'date', 'reservaId', 'isDemo'])
+          && str(request.resource.data.unitId, 1, 60)
+          && isoDate(request.resource.data.date)
+          && str(request.resource.data.reservaId, 1, 60)
+          && request.resource.data.isDemo == false
+          && id == request.resource.data.unitId + '_' + request.resource.data.date;
+        allow delete: if isBizOwner(aid);
+      }
+
+      // ── Pagos SIMULADOS (sin pasarela): solo el dueño ───────────────────────
+      match /pagos/{id} {
+        allow read: if isOwner(aid);
+        allow create: if isBizOwner(aid)
+          && onlyKeys(['reservaId', 'monto', 'nota', 'simulado', 'isDemo', 'createdAt'])
+          && str(request.resource.data.reservaId, 1, 60)
+          && entero(request.resource.data.monto, 1, 1000000000)
+          && str(request.resource.data.nota, 0, 120)
+          && request.resource.data.simulado == true
+          && request.resource.data.isDemo == false
+          && request.resource.data.createdAt == request.time;
+        allow delete: if isBizOwner(aid);
+      }
+    }
+
+    // Consulta entre alojamientos: "mis reservas" del huésped. Solo devuelve las suyas.
+    match /{path=**}/reservas/{id} {
+      allow read: if signedIn() && resource.data.clientId == request.auth.uid;
+    }
+  }
+}
