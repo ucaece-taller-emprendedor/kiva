@@ -1,70 +1,134 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 
 const CLAVE = 'Demo-Clave-2026'
 
-test('la landing pública se ve con sus llamados a la acción', async ({ page }) => {
-  await page.goto('/')
-  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Ingresar' }).first()).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Registrarme' }).first()).toBeVisible()
-})
-
-test('registro de un usuario nuevo, cierre de sesión y login', async ({ page }) => {
-  const email = `nuevo.${Date.now()}@plantilla.test`
-  await page.goto('/app/registro')
-  await page.getByLabel('Nombre').fill('Persona Nueva')
-  await page.getByLabel('Email').fill(email)
-  await page.getByLabel('Contraseña').fill(CLAVE)
-  await page.getByRole('button', { name: 'Registrarme' }).click()
-  await expect(page).toHaveURL(/\/app\/usuario$/)
-  await expect(page.getByRole('heading', { name: /Hola, Persona Nueva/ })).toBeVisible()
-
-  // La sesión persiste al recargar.
-  await page.reload()
-  await expect(page.getByRole('heading', { name: /Hola, Persona Nueva/ })).toBeVisible()
-
-  await page.getByRole('button', { name: 'Salir' }).click()
+async function ingresar(page: Page, email: string) {
   await page.goto('/app/ingresar')
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Contraseña').fill(CLAVE)
   await page.getByRole('button', { name: 'Ingresar', exact: true }).click()
-  await expect(page).toHaveURL(/\/app\/usuario$/)
+}
+
+async function ingresarAdmin(page: Page, email = 'admin.demo@kiva.test') {
+  await page.goto('/admin/login')
+  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Contraseña').fill(CLAVE)
+  await page.getByRole('button', { name: 'Ingresar' }).click()
+}
+
+const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+const enDias = (n: number) => iso(new Date(Date.now() + n * 86_400_000))
+
+test('la landing pública se ve con sus llamados a la acción', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('gestionar tu alojamiento')
+  await expect(page.getByRole('link', { name: 'Ingresar' }).first()).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Registrarme' }).first()).toBeVisible()
 })
 
-test('el socio nuevo queda pendiente hasta que el admin lo aprueba', async ({ page }) => {
-  const email = `socio.${Date.now()}@plantilla.test`
+test('registro de un huésped, persistencia de sesión, cierre y login', async ({ page }) => {
+  const email = `huesped.${Date.now()}@kiva.test`
   await page.goto('/app/registro')
-  await page.getByLabel(/Socio/).check()
-  await page.getByLabel('Nombre').fill('Socio Nuevo')
+  await page.getByLabel(/Client/).check()
+  await page.getByLabel('Nombre').fill('Persona Nueva')
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Contraseña').fill(CLAVE)
   await page.getByRole('button', { name: 'Registrarme' }).click()
-  await expect(page).toHaveURL(/\/app\/socio$/)
+  await expect(page).toHaveURL(/\/app\/cliente$/)
+  await expect(page.getByRole('heading', { name: 'Consulta de Disponibilidad' })).toBeVisible()
+
+  await page.reload()
+  await expect(page.getByRole('heading', { name: 'Consulta de Disponibilidad' })).toBeVisible()
+
+  await page.getByRole('button', { name: 'Salir' }).click()
+  await ingresar(page, email)
+  await expect(page).toHaveURL(/\/app\/cliente$/)
+})
+
+test('el business nuevo queda pendiente hasta que el superadmin lo aprueba', async ({ page }) => {
+  const email = `alojamiento.${Date.now()}@kiva.test`
+  await page.goto('/app/registro')
+  await page.getByLabel(/Business/).check()
+  await page.getByLabel('Nombre').fill('Dueña Nueva')
+  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Contraseña').fill(CLAVE)
+  await page.getByRole('button', { name: 'Registrarme' }).click()
+  await expect(page).toHaveURL(/\/app\/panel$/)
   await expect(page.getByText(/pendiente de aprobación/)).toBeVisible()
   await page.getByRole('button', { name: 'Salir' }).click()
 
-  await page.goto('/admin/login')
-  await page.getByLabel('Email').fill('admin.demo@plantilla.test')
-  await page.getByLabel('Contraseña').fill(CLAVE)
-  await page.getByRole('button', { name: 'Ingresar' }).click()
+  await ingresarAdmin(page)
   await expect(page).toHaveURL(/\/admin$/)
-  await page.getByRole('link', { name: 'Usuarios' }).click()
-  await page.getByLabel(`Estado de ${email}`).selectOption('activo')
-  await expect(page.getByLabel(`Estado de ${email}`)).toHaveValue('activo')
+  await page.getByRole('button', { name: `Aprobar a ${email}` }).click()
+  await expect(page.getByRole('button', { name: `Aprobar a ${email}` })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Salir' }).click()
+
+  await ingresar(page, email)
+  await expect(page.getByRole('heading', { name: 'Configurá tu alojamiento' })).toBeVisible()
+  await page.getByLabel('Nombre del alojamiento').fill('Posada de Prueba')
+  await page.getByRole('button', { name: 'Crear mi alojamiento' }).click()
+  await expect(page.getByRole('heading', { name: 'Inicio' })).toBeVisible()
 })
 
-test('login de admin; un usuario común no entra al panel', async ({ page }) => {
-  await page.goto('/admin/login')
-  await page.getByLabel('Email').fill('usuario.demo@plantilla.test')
-  await page.getByLabel('Contraseña').fill(CLAVE)
-  await page.getByRole('button', { name: 'Ingresar' }).click()
+test('el business demo carga una reserva, ve la grilla y no puede superponer fechas', async ({ page }) => {
+  const nombre = `Huésped E2E ${Date.now()}`
+  const desde = 80 + Math.floor(Math.random() * 400)
+  await ingresar(page, 'business.demo@kiva.test')
+  await expect(page).toHaveURL(/\/app\/panel$/)
+  await expect(page.getByText('Unidades ocupadas hoy')).toBeVisible()
+
+  await page.goto('/app/reservas/nueva')
+  await page.getByLabel('Nombre del huésped').fill(nombre)
+  await page.getByLabel('Contacto').fill('e2e@ejemplo.com')
+  await page.getByLabel('Unidad').selectOption({ label: 'Cabaña 3' })
+  await page.getByLabel('Check-in').fill(enDias(desde))
+  await page.getByLabel('Check-out').fill(enDias(desde + 3))
+  await page.getByLabel('Importe total').fill('150000')
+  await page.getByLabel('Importe cobrado').fill('50000')
+  await page.getByRole('button', { name: 'Guardar reserva' }).click()
+  await expect(page.getByRole('heading', { name: nombre })).toBeVisible()
+  await expect(page.getByTestId('pagos')).toContainText('Registro de prueba')
+
+  // Pago simulado: baja el saldo.
+  await page.getByLabel('Importe').fill('100000')
+  await page.getByRole('button', { name: 'Registrar pago' }).click()
+  await expect(page.getByText('La reserva está paga.')).toBeVisible()
+
+  // La grilla (desde la fecha del check-in) muestra la reserva.
+  await page.getByRole('link', { name: 'Ver en disponibilidad' }).click()
+  await expect(page.getByTestId('grilla').getByText(nombre).first()).toBeVisible()
+
+  // Misma unidad, fechas superpuestas: la pantalla lo advierte y no deja guardar.
+  await page.goto('/app/reservas/nueva')
+  await page.getByLabel('Nombre del huésped').fill('Otra Persona')
+  await page.getByLabel('Contacto').fill('otra@ejemplo.com')
+  await page.getByLabel('Unidad').selectOption({ label: 'Cabaña 3' })
+  await page.getByLabel('Check-in').fill(enDias(desde + 1))
+  await page.getByLabel('Check-out').fill(enDias(desde + 2))
+  await expect(page.getByRole('alert')).toContainText('ya está reservada')
+  await expect(page.getByRole('button', { name: 'Guardar reserva' })).toBeDisabled()
+})
+
+test('el huésped demo ve su reserva y su consulta, y no ve las de otros', async ({ page }) => {
+  await ingresar(page, 'client.demo@kiva.test')
+  await expect(page).toHaveURL(/\/app\/cliente$/)
+  const mis = page.getByTestId('mis-reservas')
+  await expect(mis).toContainText('Cabaña 2')
+  await expect(mis).toContainText('Consulta enviada')
+  await expect(mis).not.toContainText('Ana Ejemplo')
+  await expect(page.getByTestId('unidades-cliente')).toContainText('Cabaña 1')
+})
+
+test('login de superadmin; un usuario común no entra al panel', async ({ page }) => {
+  await ingresarAdmin(page, 'client.demo@kiva.test')
   await expect(page.getByText('no tiene permisos de administrador')).toBeVisible()
 
-  await page.getByLabel('Email').fill('admin.demo@plantilla.test')
+  await page.getByLabel('Email').fill('admin.demo@kiva.test')
   await page.getByLabel('Contraseña').fill(CLAVE)
   await page.getByRole('button', { name: 'Ingresar' }).click()
   await expect(page).toHaveURL(/\/admin$/)
   await expect(page.getByRole('heading', { name: 'Administración' })).toBeVisible()
+  await expect(page.getByTestId('alojamientos')).toContainText('Cabañas y Departamentos Demo')
 })
 
 test('/admin sin sesión manda al login', async ({ page }) => {
