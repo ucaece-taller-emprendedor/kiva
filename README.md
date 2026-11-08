@@ -2,7 +2,7 @@
 
 App de **KIVA** (Taller Emprendedor, UCAECE Mar del Plata): reservas, disponibilidad en grilla, pagos y saldos para cabañas, departamentos y alojamientos chicos. Construida sobre la plantilla común de las startups del taller: **todo gratis y sin tarjeta** (Firebase plan Spark + GitHub).
 
-- Sitio publicado (cuando se despliegue): https://kiva-mdp.web.app · Proyecto Firebase: `kiva-mdp`
+- Sitio publicado (cuando se despliegue): https://kiva-ucaecemdp.web.app · Proyecto Firebase: `kiva-mdp`
 - Guía de la plantilla original: [`docs/NUEVA-STARTUP.md`](docs/NUEVA-STARTUP.md)
 
 > **Trabajar con una IA / traspaso:** [`CLAUDE.md`](CLAUDE.md) · [`docs/TRABAJAR-CON-IA.md`](docs/TRABAJAR-CON-IA.md) · [`docs/INSTRUCTIVO-SETUP.md`](docs/INSTRUCTIVO-SETUP.md) · [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md)
