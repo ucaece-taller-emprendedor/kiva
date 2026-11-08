@@ -1,15 +1,16 @@
-/* TEMA — cambiá estos valores para darle la identidad visual a cada startup. */
+/* TEMA KIVA — azul sobrio sobre fondo casi blanco (mismos valores que el prototipo original). */
 :root {
-  --tema-primario: #2563eb;
-  --tema-primario-texto: #ffffff;
-  --tema-acento: #f59e0b;
-  --tema-fondo: #f8fafc;
-  --tema-superficie: #ffffff;
-  --tema-texto: #0f172a;
-  --tema-texto-suave: #64748b;
-  --tema-borde: #e2e8f0;
-  --tema-peligro: #dc2626;
-  --tema-ok: #16a34a;
-  --tema-radio: 0.75rem;
-  --tema-fuente: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --tema-primario: oklch(0.45 0.13 255);
+  --tema-primario-texto: oklch(0.985 0 0);
+  --tema-acento: oklch(0.75 0.15 75);
+  --tema-aviso-texto: oklch(0.45 0.1 60);
+  --tema-fondo: oklch(0.982 0.003 250);
+  --tema-superficie: oklch(1 0 0);
+  --tema-texto: oklch(0.2 0.01 255);
+  --tema-texto-suave: oklch(0.5 0.015 255);
+  --tema-borde: oklch(0.91 0.006 250);
+  --tema-peligro: oklch(0.55 0.2 27);
+  --tema-ok: oklch(0.52 0.13 155);
+  --tema-radio: 0.625rem;
+  --tema-fuente: 'Geist', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }

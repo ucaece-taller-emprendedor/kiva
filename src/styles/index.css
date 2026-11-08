@@ -6,6 +6,7 @@
   --color-primario: var(--tema-primario);
   --color-primario-texto: var(--tema-primario-texto);
   --color-acento: var(--tema-acento);
+  --color-aviso-texto: var(--tema-aviso-texto);
   --color-fondo: var(--tema-fondo);
   --color-superficie: var(--tema-superficie);
   --color-texto: var(--tema-texto);
