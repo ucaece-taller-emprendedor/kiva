@@ -7,6 +7,7 @@ async function ingresar(page: Page, email: string) {
   await page.getByLabel('Email').fill(email)
   await page.getByLabel('Contraseña').fill(CLAVE)
   await page.getByRole('button', { name: 'Ingresar', exact: true }).click()
+  await expect(page).toHaveURL(/\/app\/(panel|cliente)$/)
 }
 
 async function ingresarAdmin(page: Page, email = 'admin.demo@kiva.test') {
@@ -117,6 +118,37 @@ test('el huésped demo ve su reserva y su consulta, y no ve las de otros', async
   await expect(mis).toContainText('Consulta enviada')
   await expect(mis).not.toContainText('Ana Ejemplo')
   await expect(page.getByTestId('unidades-cliente')).toContainText('Cabaña 1')
+})
+
+test('un huésped envía una consulta y el business la confirma; el saldo se ve en ambos paneles', async ({ page }) => {
+  const desde = 500 + Math.floor(Math.random() * 300)
+  const email = `consulta.${Date.now()}@kiva.test`
+  await page.goto('/app/registro')
+  await page.getByLabel(/Client/).check()
+  await page.getByLabel('Nombre').fill('Consultante Prueba')
+  await page.getByLabel('Email').fill(email)
+  await page.getByLabel('Contraseña').fill(CLAVE)
+  await page.getByRole('button', { name: 'Registrarme' }).click()
+  await expect(page).toHaveURL(/\/app\/cliente$/)
+  await page.getByLabel('Alojamiento').selectOption({ label: 'Cabañas y Departamentos Demo' })
+  await page.getByLabel(/Check-in/).fill(enDias(desde))
+  await page.getByLabel(/Check-out/).fill(enDias(desde + 2))
+  await page.getByRole('button', { name: 'Consultar reserva' }).first().click()
+  await page.getByRole('button', { name: 'Enviar consulta' }).click()
+  await expect(page.getByTestId('mis-reservas')).toContainText('Consulta enviada')
+  await page.getByRole('button', { name: 'Salir' }).click()
+
+  await ingresar(page, 'business.demo@kiva.test')
+  await page.goto('/app/reservas')
+  const fila = page.getByTestId('consultas').locator('li', { hasText: 'Consultante Prueba' })
+  await fila.getByLabel(/Importe total/).fill('80000')
+  await fila.getByRole('button', { name: 'Confirmar reserva' }).click()
+  await expect(page.getByTestId('consultas').locator('li', { hasText: 'Consultante Prueba' })).toHaveCount(0)
+  await page.getByRole('button', { name: 'Salir' }).click()
+
+  await ingresar(page, email)
+  await expect(page.getByTestId('mis-reservas')).toContainText('Confirmada')
+  await expect(page.getByTestId('mis-reservas')).toContainText('registro de prueba')
 })
 
 test('login de superadmin; un usuario común no entra al panel', async ({ page }) => {

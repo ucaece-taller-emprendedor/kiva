@@ -165,10 +165,10 @@ export default function PanelCliente() {
                           {u.comodidades.map(c => <li key={c} className="rounded bg-borde/60 px-2 py-0.5">{c}</li>)}
                         </ul>
                       </div>
-                      <div className="mt-5 flex items-center justify-between border-t border-borde pt-4">
+                      <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-borde pt-4">
                         <span className="text-xs text-suave">{ocupada ? 'Fechas no disponibles' : 'Fechas libres para reservar'}</span>
                         {!ocupada && rangoOk && (
-                          <Boton className="min-h-9 text-xs" onClick={() => { setError(''); setConsulta(u) }}>
+                          <Boton className="min-h-9 whitespace-nowrap text-xs" onClick={() => { setError(''); setConsulta(u) }}>
                             <MessageSquare className="size-3.5" aria-hidden /> Consultar reserva
                           </Boton>
                         )}

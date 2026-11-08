@@ -34,14 +34,14 @@ export function NegocioLayout() {
     <NegocioProvider>
       <div className="border-b border-borde bg-superficie">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2 md:px-6">
-          <nav aria-label="Panel del alojamiento" className="flex flex-1 flex-wrap gap-1">
+          <nav aria-label="Panel del alojamiento" className="flex w-full gap-1 overflow-x-auto md:w-auto md:flex-1">
             {items.map(i => (
-              <NavLink key={i.to} to={i.to} end={i.fin} className={({ isActive }) => `inline-flex h-9 items-center rounded-full px-3 text-sm font-medium transition-colors ${isActive ? 'bg-primario text-primario-texto' : 'text-suave hover:bg-primario/10 hover:text-texto'}`}>
+              <NavLink key={i.to} to={i.to} end={i.fin} className={({ isActive }) => `inline-flex h-9 shrink-0 items-center rounded-full px-3 text-sm font-medium transition-colors ${isActive ? 'bg-primario text-primario-texto' : 'text-suave hover:bg-primario/10 hover:text-texto'}`}>
                 {i.etiqueta}
               </NavLink>
             ))}
           </nav>
-          <BotonLink to="/app/reservas/nueva" className="min-h-9">
+          <BotonLink to="/app/reservas/nueva" className="min-h-9 w-full sm:w-auto">
             <Plus className="size-4" aria-hidden /> Nueva reserva
           </BotonLink>
         </div>

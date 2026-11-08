@@ -1,18 +1,40 @@
-# Plantilla de app para startups — Taller Emprendedor
+# KIVA — gestión para pequeños alojamientos turísticos
 
-Plantilla común para las apps de las startups del Taller Emprendedor (UCAECE Mar del Plata). Trae lo mismo en todas: web pública, app de usuarios (registro, login con Google y con email, tipos de usuario con aprobación), panel de administración, base de datos, reglas de seguridad, tests y publicación automática. **Todo gratis y sin tarjeta** (Firebase plan Spark + GitHub).
+App de **KIVA** (Taller Emprendedor, UCAECE Mar del Plata): reservas, disponibilidad en grilla, pagos y saldos para cabañas, departamentos y alojamientos chicos. Construida sobre la plantilla común de las startups del taller: **todo gratis y sin tarjeta** (Firebase plan Spark + GitHub).
 
-> Esta es la versión **neutra**. Para ver una app real armada con ella, mirá la rama `piloto-vacacionapp`.
+- Sitio publicado (cuando se despliegue): https://kiva-mdp.web.app · Proyecto Firebase: `kiva-mdp`
+- Guía de la plantilla original: [`docs/NUEVA-STARTUP.md`](docs/NUEVA-STARTUP.md)
 
 ## Qué incluye
 
 | Parte | Ruta | Descripción |
 |---|---|---|
-| Web pública | `/` | Landing: problema, solución, beneficios, llamado a la acción, botones Ingresar / Registrarme |
-| App de usuarios | `/app/...` | Registro y login (Google y email/contraseña), sesión persistente, tipo de usuario, panel por rol. Mobile first |
-| Administración | `/admin/...` | Solo login (sin registro). Gestiona usuarios y datos. Rol validado en el servidor con las reglas |
+| Web pública | `/` | Landing de KIVA: problema, solución, beneficios, módulos, botones Ingresar / Registrarme |
+| App de usuarios | `/app/...` | Registro y login (Google y email/contraseña), sesión persistente, elección de tipo (Business o Client) |
+| Panel Business | `/app/panel`, `/app/reservas`, `/app/disponibilidad`, `/app/unidades` | Dueño del alojamiento (aprobado por el superadmin): inicio con ocupación y saldos, reservas, grilla de 14 días, unidades, pagos de prueba |
+| Portal Client | `/app/cliente` | Huésped: consulta disponibilidad (sin ver datos de otros), envía consultas de reserva y ve sus reservas y saldos |
+| Superadmin | `/admin/...` | Solo login (sin registro): aprueba alojamientos, supervisa alojamientos y usuarios |
 
 **Stack:** Vite + React + TypeScript estricto + Tailwind + React Router · Firebase (Auth + Firestore + Hosting) · Zod · ESLint · Playwright · GitHub Actions. Sin servidor propio, sin Cloud Functions, sin Storage.
+
+## Roles
+
+- **Superadmin** (`admin`): custom claim `admin: true`. No se registra; se lo da la cátedra (ver «Administradores»).
+- **Business** (dueño de un alojamiento): se registra en `/app` y queda **pendiente**; el superadmin lo aprueba. Recién ahí configura su alojamiento y gestiona SUS unidades, reservas, disponibilidad, pagos y saldos.
+- **Client** (huésped): se registra y queda activo. Ve la disponibilidad de los alojamientos, envía consultas de reserva y ve solo SUS reservas.
+
+## Modelo de datos (Firestore)
+
+```
+users/{uid}                                perfil + rol + estado
+alojamientos/{uid del business}            nombre, WhatsApp y correo de contacto
+  unidades/{id}                            cabañas / departamentos
+  reservas/{id}                            reservas y consultas (privadas: dueño y huésped de esa reserva)
+  ocupacion/{unidad_AAAA-MM-DD}            una noche ocupada, sin datos personales (lo que ve el huésped)
+  pagos/{id}                               pagos SIMULADOS («Registro de prueba»): sin pasarela
+```
+
+La doble reserva se impide **en el servidor**: cada noche ocupada es un documento con id `unidad_fecha` que no se puede crear dos veces (las reglas no permiten pisarlo). Además la pantalla avisa antes de guardar.
 
 ## Correrlo en tu computadora (con emuladores, sin tocar producción)
 
@@ -33,11 +55,13 @@ Contraseña de todos: `Demo-Clave-2026`
 
 | Tipo | Email | Estado |
 |---|---|---|
-| Usuario | `usuario.demo@plantilla.test` | activo |
-| Socio | `socio.demo@plantilla.test` | activo |
-| Socio pendiente | `pendiente.demo@plantilla.test` | pendiente de aprobación |
-| Admin | `admin.demo@plantilla.test` | entra en `/admin/login` |
+| Client (huésped) | `client.demo@kiva.test` | activo; tiene una reserva confirmada y una consulta |
+| Business (alojamiento) | `business.demo@kiva.test` | activo; dueño de «Cabañas y Departamentos Demo» (4 unidades, 5+ reservas) |
+| Business pendiente | `pendiente.demo@kiva.test` | pendiente de aprobación |
+| Superadmin | `admin.demo@kiva.test` | entra en `/admin/login` |
 
+> Los datos de demo (todos `isDemo: true`) usan fechas relativas a hoy, como el prototipo original. Los pagos son **registros de prueba**: KIVA no cobra ni se conecta con pasarelas.
+>
 > **Login con Google:** no se puede probar contra los emuladores (Google no autentica en local). Se prueba en el sitio publicado.
 
 ## Variables de entorno
@@ -64,9 +88,9 @@ Copiá `.env.example` a `.env` y completá con la config web de Firebase (Consol
 
 - **Las reglas de Firestore (`firestore.rules`) son la validación del servidor.** Esconder botones no protege nada: toda lectura y escritura pasa por las reglas.
 - **Admin** = *custom claim* `admin: true` en el token de la persona. Nadie puede dárselo desde la app; solo se otorga con el script de `firebase-admin` (ver abajo).
-- Un usuario **no puede cambiar su propio rol ni su estado** de aprobación. Los tipos que requieren aprobación se crean `pendiente` y solo el admin los activa.
+- Un usuario **no puede cambiar su propio rol ni su estado** de aprobación. Los business se crean `pendiente` y solo el admin los activa. Cada alojamiento solo ve y modifica sus datos; un huésped solo lee sus reservas; el superadmin no lee datos de huéspedes (reservas ni pagos).
 - Los formularios se validan con **Zod** en el cliente (mensajes claros) y las reglas validan tipos, enums y campos permitidos.
-- Los tests de `tests/rules` prueban estos casos (escalada de rol, leer datos ajenos, publicar siendo pendiente, etc.).
+- Los tests de `tests/rules` prueban estos casos (escalada de rol, acceso cruzado entre alojamientos y entre huéspedes, business pendiente, doble reserva de una noche, pagos no simulados, etc.).
 
 ## Administradores
 
@@ -102,6 +126,12 @@ CI (`.github/workflows/ci.yml`): en cada PR corre lint, build, tests de reglas y
 - **No hay** Cloud Functions ni Cloud Storage (por eso las imágenes son archivos del propio sitio, en `public/`, o URLs).
 - Al llegar al tope diario, Firebase **corta el servicio hasta el día siguiente** (no cobra): por eso no hace falta tarjeta **mientras no activen el plan Blaze**. No lo activen.
 
+**Particularidades de KIVA dentro del plan Spark**
+
+- Cada **noche reservada** es un documento (`ocupacion`): una estadía de 10 noches escribe 10 documentos (el tope por reserva es de 60 noches). Alcanza de sobra para un alojamiento chico, pero hay que tenerlo en cuenta contra las 20.000 escrituras diarias.
+- «Mis reservas» del huésped usa una consulta entre alojamientos (*collection group*): necesita el índice declarado en `firestore.indexes.json`, que se despliega junto con las reglas (`npm run deploy:reglas`).
+- Sin Cloud Functions no hay notificaciones por mail ni pasarela de pago: la consulta del huésped llega al panel del alojamiento y los pagos son registros de prueba.
+
 ## Cómo llevarte este proyecto
 
 Cuando un alumno quiere quedarse con el proyecto:
@@ -135,4 +165,4 @@ Guía para convertir la plantilla en una startup nueva: [`docs/NUEVA-STARTUP.md`
 
 ## Licencia
 
-Pendiente de definir por la cátedra (ver `LICENSE`).
+Pendiente de definir por la cátedra y el equipo de KIVA (ver `LICENSE`).
